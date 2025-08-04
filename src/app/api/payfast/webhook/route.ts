@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerComponentClient } from '@/lib/supabase';
 import { processPayFastWebhook, verifyPayFastWebhook } from '@/lib/payfast';
-import { cookies } from 'next/headers';
+
+// Dynamic import for Supabase to avoid build-time issues
+async function getSupabaseClient() {
+  try {
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      const { createServerComponentClient } = await import('@/lib/supabase');
+      return createServerComponentClient();
+    }
+    return null;
+  } catch (error) {
+    console.warn('Supabase client creation failed:', error);
+    return null;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,8 +34,13 @@ export async function POST(request: NextRequest) {
     // Process the webhook
     const paymentInfo = processPayFastWebhook(webhookData);
     
-    // Initialize Supabase client
-    const supabase = createServerComponentClient();
+    // Initialize Supabase client (only if environment variables are available)
+    const supabase = await getSupabaseClient();
+    
+    if (!supabase) {
+      console.warn('Supabase not available - webhook processing will be limited');
+      return NextResponse.json({ success: true, message: 'Webhook received but database not configured' });
+    }
 
     // Update subscription status based on payment status
     if (paymentInfo.status === 'COMPLETE') {

@@ -1,8 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Environment variables with fallbacks
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+// Check if Supabase is configured
+const isSupabaseConfigured = supabaseUrl && supabaseAnonKey;
 
 // Database types (we'll create this later)
 export type Database = {
@@ -24,21 +27,27 @@ export type Database = {
 };
 
 // Client-side Supabase client
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+export const supabase = isSupabaseConfigured 
+  ? createClient<Database>(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    })
+  : null;
 
 // Browser client for client-side usage
 export function createClientComponentClient() {
+  if (!isSupabaseConfigured) {
+    console.warn('Supabase not configured - client will be null');
+    return null;
+  }
   return createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       autoRefreshToken: true,
@@ -50,6 +59,9 @@ export function createClientComponentClient() {
 
 // Server client for server-side usage (only use in server components)
 export function createServerComponentClient() {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase URL and Anon Key are required for server client');
+  }
   return createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       autoRefreshToken: true,
@@ -61,6 +73,9 @@ export function createServerComponentClient() {
 
 // Middleware client for API routes (only use in API routes)
 export function createMiddlewareClient(request: Request) {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase URL and Anon Key are required for middleware client');
+  }
   return createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       autoRefreshToken: true,
@@ -75,6 +90,10 @@ export const supabaseUtils = {
   // Get current user
   async getCurrentUser() {
     try {
+      if (!supabase) {
+        console.warn('Supabase not configured');
+        return null;
+      }
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error) throw error;
       return user;
